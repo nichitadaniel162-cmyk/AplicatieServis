@@ -54,7 +54,7 @@ def get_date_manuale():
         {"nume": "Logan - Revizie",       "skill_req": 0, "grad_dificultate": 1, "ore": 2},
     ]
 
-    # LOGICA DE SPARGERE (Split) aplicata pe date
+    # lOGICA DE SPARGERE SPLIT
     for t in raw_tasks:
         ore_totale = t["ore"]
         skill_req = t["skill_req"]
@@ -112,3 +112,90 @@ def calculate_costs(individual): # Se creaza cost + penalizare
     for task_idx, mec_id in enumerate(individual):
         mecanic = MECANICI[mec_id]
         task = TASKS[task_idx]
+    # 1. Cost Financiar Direct
+        total_cost += task["ore"] * mecanic["cost"]
+        ore_mecanici[mec_id] += task["ore"]
+
+        # 2. Penalizare Hard: Competenta Tehnica
+        if task["skill_req"] not in mecanic["skill"]:
+            penalizari += 5000
+
+        elif task["grad_dificultate"] > mecanic["nivel"]:
+            diferenta = task["grad_dificultate"] - mecanic["nivel"]
+            penalizari += diferenta * 2000
+
+    # 4. Penalizare Soft: Depasire Capacitate
+    for mid, ore in ore_mecanici.items():
+        if ore > MECANICI[mid]["max_ore"]:
+            penalizari += (ore - MECANICI[mid]["max_ore"]) * 1000
+
+    return total_cost, penalizari
+
+
+def fitness(individual): #Se genereaza scorul fitness
+    cost, pen = calculate_costs(individual)
+    return 1 / (cost + pen + 1)
+
+
+def selection(population): # se alege individul cu scorul cel mai mare dintre cei 4
+    sample = random.sample(population, 4)
+    return max(sample, key=fitness)
+
+
+def crossover(p1, p2): #se taie genele parintilor in 2 (x/y)(a/b) si se ia cate o trasatura de la fiecare parinte
+    point = random.randint(1, len(TASKS) - 1)
+    c1 = p1[:point] + p2[point:]
+    c2 = p2[:point] + p1[point:]
+    return c1, c2
+
+
+def mutate(individual): # se creaza o fluctuatie a genelor pt ca genele sa nu ramana aceleasi
+    if random.random() < MUTATION_RATE:
+        idx = random.randint(0, len(TASKS) - 1)
+        individual[idx] = random.randint(0, len(MECANICI) - 1)
+    return individual
+
+# 3. MOTORUL ALGORITMULUI (Execution Loop)
+
+def run_genetic_algorithm():
+    population = init_population()
+    best_ever = None
+    best_fitness_ever = -1
+
+    for gen in range(GENERATIONS):
+        new_population = []
+
+        # Elitism - preia cea mai buna gena si o pune in generatia urmatoare
+        population.sort(key=fitness, reverse=True)
+        if fitness(population[0]) > best_fitness_ever:
+            best_fitness_ever = fitness(population[0])
+            best_ever = population[0][:]
+
+        new_population.append(population[0])
+
+        # Evolutie - se preiau 2 parinti cu gene bune si incercam sa creem un copil cu gene si mai bune ca parintii,dar cu posibilitatea sa iasa mai rau
+        while len(new_population) < POP_SIZE:
+            p1 = selection(population)
+            p2 = selection(population)
+            c1, c2 = crossover(p1, p2)
+            new_population.append(mutate(c1))
+            if len(new_population) < POP_SIZE:
+                new_population.append(mutate(c2))
+
+        population = new_population
+
+    return best_ever
+
+# 4. RAPORTARE REZULTATE
+
+def run_benchmarking():
+    afiseaza_mecanici()
+
+    print("=== RULARE ALGORITM GENETIC (OPTIMIZARE RESURSE) ===")
+
+    # 1. GA
+    start_time = time.time()
+    best_ga = run_genetic_algorithm()
+    duration_ga = time.time() - start_time
+    cost_ga, pen_ga = calculate_costs(best_ga)
+
